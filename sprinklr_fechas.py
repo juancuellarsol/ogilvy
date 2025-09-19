@@ -3,30 +3,35 @@ sprinklr_fechas.py
 ------------------------------
 Refactor reutilizable y robusto para exports de Sprinklr.
 
-Novedades v2:
-- Soporte para procesar **DataFrames** directamente: `process_dataframe(df, created_col=...)`
-- Hora en formato **12h con AM/PM** sin ceros a la izquierda (ej. "8:00:00 PM")
-- Funciones de exportación simples: `export_df(df, out_path)`
-- Modo archivo único y **batch** con auto-export y sufijos
-- Detección flexible de la columna de fecha/hora
+Incluye:
+- process_file(file_path, ...): lee el archivo y devuelve DF con columnas 'date' y 'hora' (AM/PM)
+- process_dataframe(df, ...): procesa un DataFrame ya cargado
+- export_df(df, out_path): exporta a .xlsx o .csv
+- auto_export(file_path, ...): lee, procesa y guarda en un paso (sufijo y formato)
+- batch_export(files, ...): procesa varios archivos
 
-Ejemplos rápidos
-----------------
-1) Solo exportar desde archivo:
-    from sprinklr_fechas_refactor_v2 import auto_export
-    out = auto_export("XandNewsCO.xlsx", created_col="Created Time", skiprows=2, suffix="_limpio", fmt="xlsx")
+Detalles:
+- Hora en formato 12h con AM/PM (sin cero inicial). Ej: '8:00:00 AM' / '8:00:00 PM'
+- Fecha en M/D/YYYY (sin ceros a la izquierda)
+- Detección flexible de la columna de fecha (por defecto 'Created Time')
+- Conversión opcional de zona horaria (tz_from / tz_to) si 'pytz' está disponible
 
-2) Revisar primero y luego exportar:
-    from sprinklr_fechas_refactor_v2 import process_file, export_df
-    df = process_file("XandNewsCO.xlsx", created_col="Created Time", skiprows=2)
-    export_df(df, "XandNewsCO_limpio.xlsx")
+Ejemplos rápidos:
+-----------------
+# 1) Solo exportar desde archivo
+from sprinklr_fechas import auto_export
+out = auto_export("XandNewsCO.xlsx", created_col="Created Time", skiprows=2, suffix="_final", fmt="xlsx")
 
-3) Si ya tienes un DataFrame en memoria:
-    from sprinklr_fechas_refactor_v2 import process_dataframe
-    df2 = process_dataframe(df_original, created_col="Created Time")
+# 2) Revisar primero y luego exportar
+from sprinklr_fechas import process_file, export_df
+df = process_file("XandNewsCO.xlsx", created_col="Created Time", skiprows=2)
+export_df(df, "XandNewsCO_final.xlsx")
 
-Requisitos opcionales: `pytz` si usas tz_from/tz_to.
+# 3) Si ya tienes un DataFrame en memoria
+from sprinklr_fechas import process_dataframe
+df2 = process_dataframe(df_original, created_col="Created Time")
 """
+
 from __future__ import annotations
 import pandas as pd
 from pathlib import Path
@@ -65,6 +70,7 @@ def _read_any(file_path: Union[str, Path], skiprows=None, header: Optional[int]=
     raise ValueError(f"Formato no soportado: {ext}. Usa .xlsx, .xls o .csv.")
 
 def _ensure_naive(dt_series: pd.Series) -> pd.Series:
+    # quita zona horaria si viene con tz
     if hasattr(dt_series.dtype, "tz") and dt_series.dtype.tz is not None:
         return dt_series.dt.tz_convert(None)
     return dt_series
@@ -82,8 +88,7 @@ def process_dataframe(
     drop_original_created: bool = True
 ) -> pd.DataFrame:
     """
-    Procesa un DataFrame ya cargado.
-    Devuelve un nuevo DataFrame con 'date' y 'hora' (AM/PM) al inicio.
+    Procesa un DataFrame ya cargado y devuelve un nuevo DF con 'date' y 'hora' (AM/PM) al inicio.
     """
     if df is None or not hasattr(df, "columns"):
         raise TypeError("process_dataframe espera un pandas.DataFrame válido.")
@@ -93,6 +98,7 @@ def process_dataframe(
 
     out[col] = _coerce_datetime(out[col])
 
+    # Conversión opcional de zona horaria
     if (tz_from or tz_to) and pytz is None:
         raise RuntimeError("pytz no disponible. Instálalo para usar conversión de zona horaria.")
     if tz_from and pytz is not None and out[col].notna().any():
@@ -103,11 +109,11 @@ def process_dataframe(
 
     out[col] = _ensure_naive(out[col])
 
-    # Formato de fecha y hora
+    # Fecha y hora (12h AM/PM sin cero inicial)
     date_series = out[col].dt.month.astype("Int64").astype(str) + "/" + \
                   out[col].dt.day.astype("Int64").astype(str) + "/" + \
                   out[col].dt.year.astype("Int64").astype(str)
-    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")  # AM/PM sin cero a la izquierda
+    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
     if "hora" in out.columns: out = out.drop(columns=["hora"])
     if "date" in out.columns: out = out.drop(columns=["date"])
