@@ -95,6 +95,7 @@ def process_dataframe(
 
     col = _find_created_col(df.columns, created_col)
     out = df.copy()
+    out = out.drop(columns=["Sender Profile Image Url", "Associated Cases"], errors="ignore")
 
     out[col] = _coerce_datetime(out[col])
 
