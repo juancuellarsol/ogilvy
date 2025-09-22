@@ -116,15 +116,37 @@ def process_dataframe(
                   out[col].dt.year.astype("Int64").astype(str)
     hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
-    if "hora" in out.columns: out = out.drop(columns=["hora"])
-    if "date" in out.columns: out = out.drop(columns=["date"])
+    # Tag: concatenar fecha y hora, separados por "-"
+    tag = date_series + hora_series
+
+    # Día: cálculo especial
+    # Definimos la hora de corte (5:00 PM = 17:00)
+    HORA_CORTE = 17  # 17:00 es 5pm
+    minutos_corte = 0
+    # Obtenemos la hora y minuto del registro
+    horas = out[col].dt.hour
+    minutos = out[col].dt.minute
+
+    # Si la hora es >= 17, el día es el mismo que la fecha
+    # Si la hora es < 17, el día es el anterior (fecha menos 1)
+    dias = out[col].dt.date
+    dias = dias.where(horas >= HORA_CORTE, dias - pd.Timedelta(days=1))
+    # Convertimos a string con formato M/D/YYYY
+    dia_series = dias.month.astype(str) + "/" + dias.day.astype(str) + "/" + dias.year.astype(str)
+
+    # Insertar las nuevas columnas
+    for c in ("hora", "date", "tag", "Día"):
+        if c in out.columns: out = out.drop(columns=[c])
+    out.insert(0, "day", dia_series)
+    out.insert(0, "tag", tag)
     out.insert(0, "hora", hora_series)
     out.insert(0, "date", date_series)
+    
 
     if drop_original_created:
         out = out.drop(columns=[col])
 
-    ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora")]
+    ordered = ["date", "hora", "tag", "day" ] + [c for c in out.columns if c not in ("date", "hora")]
     return out[ordered]
 
 def process_file(
