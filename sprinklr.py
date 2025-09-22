@@ -116,8 +116,15 @@ def process_dataframe(
                   out[col].dt.year.astype("Int64").astype(str)
     hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
+    # Concatenación (solo si la quieres como texto también)
+    tag_text = date_series + "-" + hora_series
+
+    # Tag como número (timestamp en segundos)
+    tag = out[col].astype("int64") // 10**9
+    
     # Tag: concatenar fecha y hora, separados por "-"
-    tag = date_series + hora_series
+    #tag = date_series + hora_series
+    
 
     # Día: cálculo especial
     # Definimos la hora de corte (5:00 PM = 17:00)
