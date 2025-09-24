@@ -117,10 +117,10 @@ def process_dataframe(
     hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
     # Concatenación (solo si la quieres como texto también)
-    tag_text = date_series + "-" + hora_series
+    #tag_text = date_series + "-" + hora_series
 
     # Tag como número (timestamp en segundos)
-    tag_series = out[col].astype("int64") // 10**9
+    #tag_series = out[col].astype("int64") // 10**9
     
     # Tag: concatenar fecha y hora, separados por "-"
     #tag = date_series + hora_series
@@ -145,7 +145,7 @@ def process_dataframe(
     for c in ("hora", "date", "tag"):#, "Día"):
         if c in out.columns: out = out.drop(columns=[c])
     #out.insert(0, "day", dia_series)
-    out.insert(0, "tag", tag_series)
+    #out.insert(0, "tag", tag_series)
     out.insert(0, "hora", hora_series)
     out.insert(0, "date", date_series)
     
@@ -153,7 +153,7 @@ def process_dataframe(
     if drop_original_created:
         out = out.drop(columns=[col])
 
-    ordered = ["date", "hora", "tag" ] + [c for c in out.columns if c not in ("date", "hora", "tag")] #, "day"
+    ordered = ["date", "hora" ] + [c for c in out.columns if c not in ("date", "hora")] #, "day" , "tag" , "tag"
     return out[ordered]
 
 def process_file(
