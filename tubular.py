@@ -146,7 +146,7 @@ def process_dataframe(
       # Hora redondeada a la hora hacia abajo (H:00:00) en formato 12h AM/PM sin cero inicial
       
       
-    hora_cerrada = out[col].dt.floor("H")
+    hora_cerrada = out[col].dt.floor("h")
     hora_series = hora_cerrada.dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
     
