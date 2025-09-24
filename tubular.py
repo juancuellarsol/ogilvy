@@ -45,7 +45,13 @@ except Exception:
 
 _CANDIDATE_CREATED_COLS = [
     "Created Time", "Created time", "created_time", "created time",
-    "Fecha de creación", "Fecha", "Date Created", "Timestamp", "Time", "Published_Date", "published date"
+    "Fecha de creación", "Fecha", "Date Created", "Timestamp", "Time"
+]
+
+# Lista de columnas deseadas por defecto (puedes modificarla aquí)
+_DEFAULT_KEEP_COLUMNS = [
+    'Date', 'Creator', 'Video_Title', "Video_URL", 
+    'Total_Engagements', 'Views', "platform"
 ]
 
 def _find_created_col(columns: Sequence[str], preferred: Optional[str]) -> str:
@@ -56,7 +62,7 @@ def _find_created_col(columns: Sequence[str], preferred: Optional[str]) -> str:
             return name
     lowered = {c.lower(): c for c in columns}
     for key, original in lowered.items():
-        if any(w in key for w in ("creat", "fecha", "time", "date", "timestamp", "published")):
+        if any(w in key for w in ("creat", "fecha", "time", "date", "timestamp")):
             return original
     raise KeyError("No pude encontrar la columna de fecha/hora. Especifica 'created_col'.")
 
@@ -85,29 +91,42 @@ def process_dataframe(
     created_col: Optional[str] = "Created Time",
     tz_from: Optional[str] = None,
     tz_to: Optional[str] = None,
-    drop_original_created: bool = True
+    drop_original_created: bool = True,
+    keep_columns: Optional[List[str]] = None,
+    use_default_columns: bool = True
 ) -> pd.DataFrame:
     """
     Procesa un DataFrame ya cargado y devuelve un nuevo DF con 'date' y 'hora' (AM/PM) al inicio.
+    
+    Args:
+        keep_columns: Lista de columnas a mantener del DataFrame original (además de 'date', 'hora', 'tag').
+                     Si es None, usa _DEFAULT_KEEP_COLUMNS si use_default_columns=True.
+        use_default_columns: Si True, usa la lista predefinida cuando keep_columns es None.
+                           Si False, mantiene todas las columnas (comportamiento original).
     """
     if df is None or not hasattr(df, "columns"):
         raise TypeError("process_dataframe espera un pandas.DataFrame válido.")
 
     col = _find_created_col(df.columns, created_col)
     out = df.copy()
+    
+# --- Normalización y parseo robusto de fecha/hora ---
 
-  # Lista de columnas que SÍ quieres mantener
-    cols_drop = [c for c in out.columns if c not in ['Published_Date',"Platform","Creator","Video_Title","Video_URL", "Total_Engagements", 'Views']]
+# 1) Normaliza 'a.m.'/'p.m.' (variantes) a 'AM'/'PM'
+    raw = out[col].astype(str)
+    raw = (raw
+           .str.replace(r'\s*a[.\s]?m[.]?', ' AM', regex=True, case=False)
+           .str.replace(r'\s*p[.\s]?m[.]?', ' PM', regex=True, case=False))
 
-  # Reordena el DataFrame solo con esas columnas
-    out = out.drop[cols_drop]
+# 2) A datetime (dd/mm/yyyy) con tolerancia
+    out[col] = pd.to_datetime(
+        raw,
+        errors="coerce",
+        dayfirst=True,                # <- IMPORTANTE para 21/09/2025
+        infer_datetime_format=True
+    )
 
-  
-    out = out.drop(columns=["Sender Profile Image Url", "Associated Cases"], errors="ignore")
-
-    out[col] = _coerce_datetime(out[col])
-
-    # Conversión opcional de zona horaria
+# (si usas tz_from/tz_to, aplica aquí y luego vuelve a dejar naive)
     if (tz_from or tz_to) and pytz is None:
         raise RuntimeError("pytz no disponible. Instálalo para usar conversión de zona horaria.")
     if tz_from and pytz is not None and out[col].notna().any():
@@ -115,24 +134,27 @@ def process_dataframe(
             out[col] = out[col].dt.tz_localize(pytz.timezone(tz_from), nonexistent="NaT", ambiguous="NaT")
     if tz_to and pytz is not None and out[col].notna().any():
         out[col] = out[col].dt.tz_convert(pytz.timezone(tz_to))
-
     out[col] = _ensure_naive(out[col])
 
     # Fecha y hora (12h AM/PM sin cero inicial)
     date_series = out[col].dt.month.astype("Int64").astype(str) + "/" + \
                   out[col].dt.day.astype("Int64").astype(str) + "/" + \
                   out[col].dt.year.astype("Int64").astype(str)
-    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
+    
+    # Hora redondeada hacia abajo (agrupar por hora completa)
+    # Ejemplo: 1:30:00 PM -> 1:00:00 PM, 8:07:00 PM -> 8:00:00 PM
+      # Hora redondeada a la hora hacia abajo (H:00:00) en formato 12h AM/PM sin cero inicial
+      
+      
+    hora_cerrada = out[col].dt.floor("H")
+    hora_series = hora_cerrada.dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
-    # Concatenación (solo si la quieres como texto también)
-    tag_text = date_series + "-" + hora_series
+    
+    # Tag como texto: fecha + hora concatenadas
+    #tag_text = date_series + "-" + hora_series
 
     # Tag como número (timestamp en segundos)
-    tag_series = out[col].astype("int64") // 10**9
-    
-    # Tag: concatenar fecha y hora, separados por "-"
-    #tag = date_series + hora_series
-    
+    #tag_series = out[col].astype("int64") // 10**9
 
     # Día: cálculo especial
     # Definimos la hora de corte (5:00 PM = 17:00)
@@ -150,10 +172,11 @@ def process_dataframe(
     #dia_series = dias.month.astype(str) + "/" + dias.day.astype(str) + "/" + dias.year.astype(str)
 
     # Insertar las nuevas columnas
-    for c in ("hora", "date", "tag"):#, "Día"):
+    for c in ("hora", "date"):#, "Día"):  "tag", "tag_text"
         if c in out.columns: out = out.drop(columns=[c])
     #out.insert(0, "day", dia_series)
-    out.insert(0, "tag", tag_series)
+    #out.insert(0, "tag_text", tag_text)
+    #out.insert(0, "tag", tag_series)
     out.insert(0, "hora", hora_series)
     out.insert(0, "date", date_series)
     
@@ -161,8 +184,39 @@ def process_dataframe(
     if drop_original_created:
         out = out.drop(columns=[col])
 
-    ordered = ["date", "hora", "tag" ] + [c for c in out.columns if c not in ("date", "hora", "tag")] #, "day"
-    return out[ordered]
+    # Selección de columnas: usar keep_columns, o la lista por defecto, o mantener todas
+    if keep_columns is not None or use_default_columns:
+        # Determinar qué columnas usar
+        columns_to_keep = keep_columns if keep_columns is not None else _DEFAULT_KEEP_COLUMNS
+        
+        # Buscar coincidencias de columns_to_keep en las columnas disponibles (case-insensitive)
+        available_cols = list(out.columns)
+        cols_lower = {c.lower(): c for c in available_cols}
+        
+        # Columnas que siempre mantenemos
+        final_cols = ["date", "hora", "tag", "tag_text"]
+        
+        # Agregar las columnas solicitadas que existen
+        for requested_col in columns_to_keep:
+            # Buscar coincidencia exacta primero
+            if requested_col in available_cols:
+                if requested_col not in final_cols:
+                    final_cols.append(requested_col)
+            # Si no encuentra coincidencia exacta, buscar case-insensitive
+            elif requested_col.lower() in cols_lower:
+                actual_col = cols_lower[requested_col.lower()]
+                if actual_col not in final_cols:
+                    final_cols.append(actual_col)
+            else:
+                print(f"[WARN] Columna '{requested_col}' no encontrada en el DataFrame")
+        
+        # Filtrar el DataFrame solo con las columnas seleccionadas
+        out = out[final_cols]
+        return out
+    else:
+        # Comportamiento original: mantener todas las columnas
+        ordered = ["date", "hora", "tag", "tag_text"] + [c for c in out.columns if c not in ("date", "hora", "tag", "tag_text")] #, "day"
+        return out[ordered]
 
 def process_file(
     file_path: Union[str, Path],
@@ -171,12 +225,15 @@ def process_file(
     header: Optional[int] = 0,
     tz_from: Optional[str] = None,
     tz_to: Optional[str] = None,
-    drop_original_created: bool = True
+    drop_original_created: bool = True,
+    keep_columns: Optional[List[str]] = None,
+    use_default_columns: bool = True
 ) -> pd.DataFrame:
     df = _read_any(file_path, skiprows=skiprows, header=header)
     return process_dataframe(
         df, created_col=created_col, tz_from=tz_from, tz_to=tz_to,
-        drop_original_created=drop_original_created
+        drop_original_created=drop_original_created, keep_columns=keep_columns,
+        use_default_columns=use_default_columns
     )
 
 def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
@@ -205,7 +262,9 @@ def auto_export(
     fmt: str = "xlsx",
     tz_from: Optional[str] = None,
     tz_to: Optional[str] = None,
-    drop_original_created: bool = True
+    drop_original_created: bool = True,
+    keep_columns: Optional[List[str]] = None,
+    use_default_columns: bool = True
 ) -> Path:
     out = _derive_out_path(file_path, suffix, fmt)
     df = process_file(
@@ -215,7 +274,9 @@ def auto_export(
         header=header,
         tz_from=tz_from,
         tz_to=tz_to,
-        drop_original_created=drop_original_created
+        drop_original_created=drop_original_created,
+        keep_columns=keep_columns,
+        use_default_columns=use_default_columns
     )
     export_df(df, out)
     return out
@@ -229,7 +290,9 @@ def batch_export(
     fmt: str = "xlsx",
     tz_from: Optional[str] = None,
     tz_to: Optional[str] = None,
-    drop_original_created: bool = True
+    drop_original_created: bool = True,
+    keep_columns: Optional[List[str]] = None,
+    use_default_columns: bool = True
 ) -> List[Path]:
     outs: List[Path] = []
     for f in files:
@@ -237,7 +300,8 @@ def batch_export(
             out = auto_export(
                 f, created_col=created_col, skiprows=skiprows, header=header,
                 suffix=suffix, fmt=fmt, tz_from=tz_from, tz_to=tz_to,
-                drop_original_created=drop_original_created
+                drop_original_created=drop_original_created, keep_columns=keep_columns,
+                use_default_columns=use_default_columns
             )
             outs.append(out)
         except Exception as e:
