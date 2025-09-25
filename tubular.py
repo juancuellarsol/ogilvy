@@ -181,23 +181,23 @@ def process_dataframe(
 
     # --- Selección final de columnas ---
 # Si pides columnas, filtramos SOLO esas (más 'date' y 'hora').
-if use_default_columns and keep_columns is None:
-    keep_columns = [
-        "Published_Date", "Platform", "Creator", "Video_Title",
-        "Video_URL", "Total_Engagements", "Views"
-    ]
+    if use_default_columns and keep_columns is None:
+        keep_columns = [
+            "Published_Date", "Platform", "Creator", "Video_Title",
+            "Video_URL", "Total_Engagements", "Views"
+        ]
 
-if keep_columns is not None:
-    # Asegura que sea lista (y no un string suelto)
-    keep_columns = list(keep_columns)
-    final_cols = ["date", "hora"] + [c for c in keep_columns if c in out.columns]
-    # reindex garantiza que NO se cuelen otras columnas
-    out = out.reindex(columns=final_cols)
-    return out
+    if keep_columns is not None:
+        # Asegura que sea lista (y no un string suelto)
+        keep_columns = list(keep_columns)
+        final_cols = ["date", "hora"] + [c for c in keep_columns if c in out.columns]
+        # reindex garantiza que NO se cuelen otras columnas
+        out = out.reindex(columns=final_cols)
+        return out
 
-# Si NO pasas keep_columns -> conservamos todo, pero con date/hora al frente
-ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora")]
-return out[ordered]
+    # Si NO pasas keep_columns -> conservamos todo, pero con date/hora al frente
+    ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora")]
+    return out[ordered]
 
 
 def process_file(
