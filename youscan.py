@@ -223,18 +223,21 @@ def _col_idx_to_xlsx_col(idx: int) -> str:
 def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
     out_path = Path(out_path)
 
-    # 1) Normaliza 'date' a SOLO fecha (sin hora)
+    # Normaliza 'date'
     if "date" in df.columns:
         df = df.copy()
         d = pd.to_datetime(df["date"].astype(str).str.strip(), dayfirst=True, errors="coerce")
-        #d = pd.to_datetime(df["date"], errors="coerce")  # si viene texto, conv.
-        df["date"] = d.dt.normalize()                    # 00:00:00 (sin hora)
-        # Si quieres aún más estricto: df["date"] = d.dt.date
+        df["date"] = d.dt.normalize()
+
+    # Normaliza 'hora' a datetime
+    if "hora" in df.columns:
+        df = df.copy()
+        df["hora"] = pd.to_datetime(df["hora"], format="%I:%M:%S %p", errors="coerce")
 
     ext = out_path.suffix.lower()
     if ext in (".xlsx", ".xls"):
         try:
-            import xlsxwriter  # asegura el motor
+            import xlsxwriter
             with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
                 sheet = "Sheet1"
                 df.to_excel(writer, index=False, sheet_name=sheet)
@@ -242,32 +245,36 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
                 workbook  = writer.book
                 ws        = writer.sheets[sheet]
 
-                # 2) Formato de celda dd/mm/yy (como en tu imagen 2)
                 if "date" in df.columns:
                     fmt = workbook.add_format({"num_format": "dd/mm/yy"})
                     cidx = df.columns.get_loc("date")
                     col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 10, fmt)  # ancho opcional
+                    ws.set_column(f"{col}:{col}", 10, fmt)
 
                 if "hora" in df.columns:
+                    fmt_hora = workbook.add_format({"num_format": "h:mm:ss AM/PM"})
                     cidx = df.columns.get_loc("hora")
                     col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 12)
+                    ws.set_column(f"{col}:{col}", 12, fmt_hora)
 
         except ModuleNotFoundError:
-            # Fallback: guarda y aplica formato con openpyxl
             df.to_excel(out_path, index=False)
             try:
                 from openpyxl import load_workbook
-                from openpyxl.styles import numbers
                 wb = load_workbook(out_path)
                 ws = wb.active
                 if "date" in df.columns:
-                    cidx = df.columns.get_loc("date") + 1  # 1-based
+                    cidx = df.columns.get_loc("date") + 1
                     for cell in ws.iter_cols(min_col=cidx, max_col=cidx,
                                              min_row=2, max_row=ws.max_row):
                         for c in cell:
-                            c.number_format = numbers.FORMAT_DATE_DDMMYY  # dd/mm/yy
+                            c.number_format = 'dd/mm/yy'
+                if "hora" in df.columns:
+                    cidx = df.columns.get_loc("hora") + 1
+                    for cell in ws.iter_cols(min_col=cidx, max_col=cidx,
+                                             min_row=2, max_row=ws.max_row):
+                        for c in cell:
+                            c.number_format = 'h:mm:ss AM/PM'
                 wb.save(out_path)
             except Exception:
                 pass
