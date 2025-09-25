@@ -92,41 +92,34 @@ def process_dataframe(
     tz_from: Optional[str] = None,
     tz_to: Optional[str] = None,
     drop_original_created: bool = True,
-    keep_columns: Optional[List[str]] = None,
-    use_default_columns: bool = True
+    keep_columns: Optional[Sequence[str]] = None,   # columnas extra a mantener
+    use_default_columns: bool = False               # si quieres usar un set por defecto
 ) -> pd.DataFrame:
     """
-    Procesa un DataFrame ya cargado y devuelve un nuevo DF con 'date' y 'hora' (AM/PM) al inicio.
-    
-    Args:
-        keep_columns: Lista de columnas a mantener del DataFrame original (además de 'date', 'hora', 'tag').
-                     Si es None, usa _DEFAULT_KEEP_COLUMNS si use_default_columns=True.
-        use_default_columns: Si True, usa la lista predefinida cuando keep_columns es None.
-                           Si False, mantiene todas las columnas (comportamiento original).
+    Tubular: crea columnas 'date' (M/D/YYYY) y 'hora' (HH:00:00 AM/PM truncada hacia abajo).
+    NO crea 'tag' ni 'tag_text'.
     """
     if df is None or not hasattr(df, "columns"):
         raise TypeError("process_dataframe espera un pandas.DataFrame válido.")
 
     col = _find_created_col(df.columns, created_col)
     out = df.copy()
-    
-# --- Normalización y parseo robusto de fecha/hora ---
 
-# 1) Normaliza 'a.m.'/'p.m.' (variantes) a 'AM'/'PM'
+    # 1) Normaliza a.m./p.m. -> AM/PM (variantes)
     raw = out[col].astype(str)
     raw = (raw
            .str.replace(r'\s*a[.\s]?m[.]?', ' AM', regex=True, case=False)
            .str.replace(r'\s*p[.\s]?m[.]?', ' PM', regex=True, case=False))
 
-# 2) A datetime (dd/mm/yyyy) con tolerancia
+    # 2) A datetime (dd/mm/yyyy)
     out[col] = pd.to_datetime(
         raw,
         errors="coerce",
-        dayfirst=True,                # <- IMPORTANTE para 21/09/2025
-        infer_datetime_format=True
+        dayfirst=True,        # tus datos vienen como 21/09/2025
+        # infer_datetime_format=True  # <- deprecado, no lo uses
     )
 
-# (si usas tz_from/tz_to, aplica aquí y luego vuelve a dejar naive)
+    # 3) TZ opcional
     if (tz_from or tz_to) and pytz is None:
         raise RuntimeError("pytz no disponible. Instálalo para usar conversión de zona horaria.")
     if tz_from and pytz is not None and out[col].notna().any():
@@ -136,87 +129,39 @@ def process_dataframe(
         out[col] = out[col].dt.tz_convert(pytz.timezone(tz_to))
     out[col] = _ensure_naive(out[col])
 
-    # Fecha y hora (12h AM/PM sin cero inicial)
-    date_series = out[col].dt.month.astype("Int64").astype(str) + "/" + \
-                  out[col].dt.day.astype("Int64").astype(str) + "/" + \
-                  out[col].dt.year.astype("Int64").astype(str)
-    
-    # Hora redondeada hacia abajo (agrupar por hora completa)
-    # Ejemplo: 1:30:00 PM -> 1:00:00 PM, 8:07:00 PM -> 8:00:00 PM
-      # Hora redondeada a la hora hacia abajo (H:00:00) en formato 12h AM/PM sin cero inicial
-      
-      
-    hora_cerrada = out[col].dt.floor("h")
-    hora_series = hora_cerrada.dt.strftime("%I:%M:%S %p").str.lstrip("0")
+    # 4) Derivadas: date y hora truncada hacia abajo
+    date_series = (
+        out[col].dt.month.astype("Int64").astype(str) + "/" +
+        out[col].dt.day.astype("Int64").astype(str) + "/" +
+        out[col].dt.year.astype("Int64").astype(str)
+    )
+    hour_bucket = out[col].dt.floor("H")
+    hora_series = hour_bucket.dt.strftime("%I:00:00 %p").str.lstrip("0")
 
-    
-    # Tag como texto: fecha + hora concatenadas
-    #tag_text = date_series + "-" + hora_series
-
-    # Tag como número (timestamp en segundos)
-    #tag_series = out[col].astype("int64") // 10**9
-
-    # Día: cálculo especial
-    # Definimos la hora de corte (5:00 PM = 17:00)
-    #HORA_CORTE = 17  # 17:00 es 5pm
-    #minutos_corte = 0
-    # Obtenemos la hora y minuto del registro
-    #horas = out[col].dt.hour
-    #minutos = out[col].dt.minute
-
-    # Si la hora es >= 17, el día es el mismo que la fecha
-    # Si la hora es < 17, el día es el anterior (fecha menos 1)
-    #dias = out[col].dt.date
-    #dias = dias.where(horas >= HORA_CORTE, dias - pd.Timedelta(days=1))
-    # Convertimos a string con formato M/D/YYYY
-    #dia_series = dias.month.astype(str) + "/" + dias.day.astype(str) + "/" + dias.year.astype(str)
-
-    # Insertar las nuevas columnas
-    for c in ("hora", "date"):#, "Día"):  "tag", "tag_text"
-        if c in out.columns: out = out.drop(columns=[c])
-    #out.insert(0, "day", dia_series)
-    #out.insert(0, "tag_text", tag_text)
-    #out.insert(0, "tag", tag_series)
+    # 5) Inserta (elimina si existían)
+    for c in ("date", "hora"):
+        if c in out.columns:
+            out = out.drop(columns=[c])
     out.insert(0, "hora", hora_series)
     out.insert(0, "date", date_series)
-    
 
-    if drop_original_created:
+    # 6) Elimina la columna original si se pide
+    if drop_original_created and col in out.columns:
         out = out.drop(columns=[col])
 
-    # Selección de columnas: usar keep_columns, o la lista por defecto, o mantener todas
-    if keep_columns is not None or use_default_columns:
-        # Determinar qué columnas usar
-        columns_to_keep = keep_columns if keep_columns is not None else _DEFAULT_KEEP_COLUMNS
-        
-        # Buscar coincidencias de columns_to_keep en las columnas disponibles (case-insensitive)
-        available_cols = list(out.columns)
-        cols_lower = {c.lower(): c for c in available_cols}
-        
-        # Columnas que siempre mantenemos
-        final_cols = ["date", "hora"]# , "tag", "tag_text"]
-        
-        # Agregar las columnas solicitadas que existen
-        for requested_col in columns_to_keep:
-            # Buscar coincidencia exacta primero
-            if requested_col in available_cols:
-                if requested_col not in final_cols:
-                    final_cols.append(requested_col)
-            # Si no encuentra coincidencia exacta, buscar case-insensitive
-            elif requested_col.lower() in cols_lower:
-                actual_col = cols_lower[requested_col.lower()]
-                if actual_col not in final_cols:
-                    final_cols.append(actual_col)
-            else:
-                print(f"[WARN] Columna '{requested_col}' no encontrada en el DataFrame")
-        
-        # Filtrar el DataFrame solo con las columnas seleccionadas
-        out = out[final_cols]
-        return out
-    else:
-        # Comportamiento original: mantener todas las columnas
-        ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora",)] #, "day" , "tag", "tag_text"  "tag", "tag_text"
-        return out[ordered]
+    # 7) Filtrado de columnas final (sin tag/tag_text)
+    if use_default_columns and keep_columns is None:
+        keep_columns = ["Published_Date", "Platform", "Creator", "Video_Title",
+                        "Video_URL", "Total_Engagements", "Views"]
+
+    if keep_columns:
+        final_cols = ["date", "hora"] + list(keep_columns)
+        out = out[[c for c in final_cols if c in out.columns]]  # <- seguro
+
+    # Orden final
+    ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora")]
+    return out[ordered]
+
 
 def process_file(
     file_path: Union[str, Path],
