@@ -180,7 +180,7 @@ def process_dataframe(
         out = out.drop(columns=[col])
 
     # --- Selección final de columnas ---
-# Si pides columnas, filtramos SOLO esas (más 'date' y 'hora').
+    # Si pides columnas, filtramos SOLO esas (más 'date' y 'hora').
     if use_default_columns and keep_columns is None:
         keep_columns = [
             "Published_Date", "Platform", "Creator", "Video_Title",
@@ -193,11 +193,11 @@ def process_dataframe(
         final_cols = ["date", "hora"] + [c for c in keep_columns if c in out.columns]
         # reindex garantiza que NO se cuelen otras columnas
         out = out.reindex(columns=final_cols)
-    return out
+        return out
 
     # Si NO pasas keep_columns -> conservamos todo, pero con date/hora al frente
     ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora")]
-return out[ordered]
+    return out[ordered]
 
 
 def process_file(
