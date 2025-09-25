@@ -178,7 +178,7 @@ def process_file(
     )
 
 
-ef _col_idx_to_xlsx_col(idx: int) -> str:
+def _col_idx_to_xlsx_col(idx: int) -> str:
     s = ""
     n = idx + 1
     while n:
