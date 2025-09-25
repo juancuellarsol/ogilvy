@@ -165,7 +165,7 @@ def process_dataframe(
         # Ajusta esta lista a lo que más uses en YouScan:
         keep_columns = [
             # ejemplo de campos frecuentes; edítalos según tu export
-            "Author", "Source", "Title", "URL", "Likes", "Comments", "Shares",
+            "Author", "Source", "Likes", "Comments", "Shares",
             "Reach", "Engagement", "Views"
         ]
 
