@@ -115,7 +115,7 @@ def process_dataframe(
 
     date_series = pd.to_datetime(out[col])
     
-    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0").str.replace("AM", "a.m.").str.replace("PM", "p.m.")
+    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0").str.replace("AM", "a. m.").str.replace("PM", "p. m.")
     
     #out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
@@ -194,17 +194,32 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
 
     # --- Asegura que 'hora' sea valor de tiempo (no texto) ---
     if "hora" in df.columns:
-        # Si viene como texto con "a. m." / "p. m." conviértelo a AM/PM y parsea
         hora_norm = (
             df["hora"].astype(str)
               .str.strip()
               .str.replace(r"\s*a[.\s]?m[.]?", " AM", regex=True, case=False)
               .str.replace(r"\s*p[.\s]?m[.]?", " PM", regex=True, case=False)
         )
-        # A datetime con solo hora (Excel usará una fecha base interna)
         h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
+    
+        # ⇩ convierte 07:15:30 ->  (7*3600 + 15*60 + 30) / 86400  = fracción del día
+        frac = (h.dt.hour * 3600 + h.dt.minute * 60 + h.dt.second) / 86400.0
+    
         df = df.copy()
-        df["hora"] = h
+        df["hora"] = frac
+    
+    #if "hora" in df.columns:
+        # Si viene como texto con "a. m." / "p. m." conviértelo a AM/PM y parsea
+    #    hora_norm = (
+    #        df["hora"].astype(str)
+    #          .str.strip()
+    #          .str.replace(r"\s*a[.\s]?m[.]?", " AM", regex=True, case=False)
+    #          .str.replace(r"\s*p[.\s]?m[.]?", " PM", regex=True, case=False)
+    #    )
+        # A datetime con solo hora (Excel usará una fecha base interna)
+    #    h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
+    #    df = df.copy()
+    #    df["hora"] = h
 
     ext = out_path.suffix.lower()
     if ext in (".xlsx", ".xls"):
