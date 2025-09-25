@@ -194,7 +194,7 @@ def process_dataframe(
         cols_lower = {c.lower(): c for c in available_cols}
         
         # Columnas que siempre mantenemos
-        final_cols = ["date", "hora", "tag", "tag_text"]
+        final_cols = ["date", "hora"]# , "tag", "tag_text"]
         
         # Agregar las columnas solicitadas que existen
         for requested_col in columns_to_keep:
