@@ -226,7 +226,8 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
     # 1) Normaliza 'date' a SOLO fecha (sin hora)
     if "date" in df.columns:
         df = df.copy()
-        d = pd.to_datetime(df["date"], errors="coerce")  # si viene texto, conv.
+        d = pd.to_datetime(df["date"].astype(str).str.strip(), dayfirst=True, errors="coerce")
+        #d = pd.to_datetime(df["date"], errors="coerce")  # si viene texto, conv.
         df["date"] = d.dt.normalize()                    # 00:00:00 (sin hora)
         # Si quieres aún más estricto: df["date"] = d.dt.date
 
