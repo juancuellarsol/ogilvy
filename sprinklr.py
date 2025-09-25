@@ -186,17 +186,30 @@ def _col_idx_to_xlsx_col(idx: int) -> str:
 def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
     out_path = Path(out_path)
 
-    # 1) Normaliza 'date' a SOLO fecha (sin hora)
+    # --- Normaliza 'date' a SOLO fecha (sin hora) ---
     if "date" in df.columns:
         df = df.copy()
-        d = pd.to_datetime(df["date"], errors="coerce")  # si viene texto, conv.
-        df["date"] = d.dt.normalize()                    # 00:00:00 (sin hora)
-        # Si quieres aún más estricto: df["date"] = d.dt.date
+        d = pd.to_datetime(df["date"], errors="coerce")
+        df["date"] = d.dt.normalize()   # 00:00:00
+
+    # --- Asegura que 'hora' sea valor de tiempo (no texto) ---
+    if "hora" in df.columns:
+        # Si viene como texto con "a. m." / "p. m." conviértelo a AM/PM y parsea
+        hora_norm = (
+            df["hora"].astype(str)
+              .str.strip()
+              .str.replace(r"\s*a[.\s]?m[.]?", " AM", regex=True, case=False)
+              .str.replace(r"\s*p[.\s]?m[.]?", " PM", regex=True, case=False)
+        )
+        # A datetime con solo hora (Excel usará una fecha base interna)
+        h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
+        df = df.copy()
+        df["hora"] = h
 
     ext = out_path.suffix.lower()
     if ext in (".xlsx", ".xls"):
         try:
-            import xlsxwriter  # asegura el motor
+            import xlsxwriter  # motor para formatear
             with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
                 sheet = "Sheet1"
                 df.to_excel(writer, index=False, sheet_name=sheet)
@@ -204,35 +217,47 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
                 workbook  = writer.book
                 ws        = writer.sheets[sheet]
 
-                # 2) Formato de celda dd/mm/yy (como en tu imagen 2)
+                # Formato fecha dd/mm/yy
                 if "date" in df.columns:
-                    fmt = workbook.add_format({"num_format": "dd/mm/yy"})
+                    fmt_date = workbook.add_format({"num_format": "dd/mm/yy"})
                     cidx = df.columns.get_loc("date")
                     col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 10, fmt)  # ancho opcional
+                    ws.set_column(f"{col}:{col}", 10, fmt_date)
 
+                # Formato hora h:mm:ss AM/PM (Excel ES muestra a. m./p. m.)
                 if "hora" in df.columns:
+                    fmt_time = workbook.add_format({"num_format": "h:mm:ss AM/PM"})
                     cidx = df.columns.get_loc("hora")
                     col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 12)
+                    ws.set_column(f"{col}:{col}", 12, fmt_time)
 
         except ModuleNotFoundError:
-            # Fallback: guarda y aplica formato con openpyxl
+            # Fallback: guardar y formatear con openpyxl
             df.to_excel(out_path, index=False)
             try:
                 from openpyxl import load_workbook
-                from openpyxl.styles import numbers
                 wb = load_workbook(out_path)
                 ws = wb.active
+                from openpyxl.styles import numbers
+
                 if "date" in df.columns:
-                    cidx = df.columns.get_loc("date") + 1  # 1-based
-                    for cell in ws.iter_cols(min_col=cidx, max_col=cidx,
-                                             min_row=2, max_row=ws.max_row):
-                        for c in cell:
+                    cidx = df.columns.get_loc("date") + 1
+                    for col_cells in ws.iter_cols(min_col=cidx, max_col=cidx,
+                                                  min_row=2, max_row=ws.max_row):
+                        for c in col_cells:
                             c.number_format = numbers.FORMAT_DATE_DDMMYY  # dd/mm/yy
+
+                if "hora" in df.columns:
+                    cidx = df.columns.get_loc("hora") + 1
+                    for col_cells in ws.iter_cols(min_col=cidx, max_col=cidx,
+                                                  min_row=2, max_row=ws.max_row):
+                        for c in col_cells:
+                            c.number_format = "h:mm:ss AM/PM"  # Excel ES -> a. m./p. m.
+
                 wb.save(out_path)
             except Exception:
                 pass
+
     elif ext == ".csv":
         df.to_csv(out_path, index=False)
     else:
