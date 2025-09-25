@@ -116,7 +116,7 @@ def process_dataframe(
                   out[col].dt.year.astype("Int64").astype(str)
     #date_series = pd.to_datetime(date_series, format="%m/%d/%Y", errors="coerce")
     #date_series = out[col].dt.normalize() 
-    date_series = out[col].dt.strftime("%d/%m/%y")
+    date_series = out[col].dt.strftime("%d/%m/%Y")
 
     hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
