@@ -215,7 +215,7 @@ def process_dataframe(
         return out
     else:
         # Comportamiento original: mantener todas las columnas
-        ordered = ["date", "hora", "tag", "tag_text"] + [c for c in out.columns if c not in ("date", "hora", "tag", "tag_text")] #, "day"
+        ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora",)] #, "day" , "tag", "tag_text"  "tag", "tag_text"
         return out[ordered]
 
 def process_file(
