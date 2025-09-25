@@ -185,11 +185,15 @@ def process_dataframe(
                         "Video_URL", "Total_Engagements", "Views"]
 
     if keep_columns:
-        final_cols = ["date", "hora"] + list(keep_columns)
-        out = out[[c for c in final_cols if c in out.columns]]  # seguro ante faltantes
-
+    # si el usuario pasó columnas -> filtra solo esas + date/hora
+    final_cols = ["date", "hora"] + list(keep_columns)
+    out = out[[c for c in final_cols if c in out.columns]]
+else:
+    # si no se pasó nada -> conserva todas las columnas originales
     ordered = ["date", "hora"] + [c for c in out.columns if c not in ("date", "hora")]
-    return out[ordered]
+    out = out[ordered]
+
+return out
 
 def process_file(
     file_path: Union[str, Path],
