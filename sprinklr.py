@@ -176,14 +176,56 @@ def process_file(
         drop_original_created=drop_original_created
     )
 
+def _col_idx_to_xlsx_col(idx: int) -> str:
+    """0->A, 1->B, ... 25->Z, 26->AA ..."""
+    s = ""
+    n = idx + 1
+    while n:
+        n, r = divmod(n - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
 def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
     out_path = Path(out_path)
-    if out_path.suffix.lower() in (".xlsx", ".xls"):
-        df.to_excel(out_path, index=False)
-    elif out_path.suffix.lower() == ".csv":
+
+    # 1) Si existe la columna 'date', conviértela a datetime para Excel
+    if "date" in df.columns:
+        # Intenta convertir sin suponer formato; si ya está en datetime no cambia nada
+        # Si tu 'date' viene como 'M/D/YYYY' en texto, esto la convierte a datetime
+        df = df.copy()
+        df["date"] = pd.to_datetime(df["date"], errors="coerce", dayfirst=False)
+
+    # 2) Exportar
+    ext = out_path.suffix.lower()
+    if ext in (".xlsx", ".xls"):
+        # Usa xlsxwriter para aplicar formato de celda en Excel
+        with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
+            sheet_name = "Sheet1"
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+
+            # Si tenemos 'date', aplica formato fecha corta
+            if "date" in df.columns:
+                workbook  = writer.book
+                worksheet = writer.sheets[sheet_name]
+                date_fmt  = workbook.add_format({"num_format": "dd/mm/yyyy"})
+
+                col_idx = df.columns.get_loc("date")  # 0-based
+                col_letter = _col_idx_to_xlsx_col(col_idx)  # p.ej. 'A'
+
+                # Aplica el formato a toda la columna (ancho opcional 12)
+                worksheet.set_column(f"{col_letter}:{col_letter}", 12, date_fmt)
+
+            # (Opcional) ancho cómodo para 'hora'
+            if "hora" in df.columns:
+                col_idx_h = df.columns.get_loc("hora")
+                col_letter_h = _col_idx_to_xlsx_col(col_idx_h)
+                writer.sheets[sheet_name].set_column(f"{col_letter_h}:{col_letter_h}", 12)
+
+    elif ext == ".csv":
         df.to_csv(out_path, index=False)
     else:
         raise ValueError("Extensión de export no soportada. Usa .xlsx o .csv.")
+
     return out_path
 
 def _derive_out_path(file_path: Union[str, Path], suffix: str, fmt: str) -> Path:
