@@ -161,11 +161,13 @@ def process_dataframe(
     out[col] = _ensure_naive(out[col])
 
     # Derivadas
-    date_series = (
-        out[col].dt.month.astype("Int64").astype(str) + "/" +
-        out[col].dt.day.astype("Int64").astype(str) + "/" +
-        out[col].dt.year.astype("Int64").astype(str)
-    )
+    #date_series = (
+    #    out[col].dt.day.astype("Int64").astype(str) + "/" +
+    #    out[col].dt.month.astype("Int64").astype(str) + "/" +
+    #    out[col].dt.year.astype("Int64").astype(str)
+    #)
+    date_series = pd.to_datetime(out[col])
+
     hour_bucket = out[col].dt.floor("h")
     hora_series = hour_bucket.dt.strftime("%I:00:00 %p").str.lstrip("0")
 
