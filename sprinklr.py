@@ -111,8 +111,8 @@ def process_dataframe(
     out[col] = _ensure_naive(out[col])
 
     # Fecha y hora (12h AM/PM sin cero inicial)
-    date_series = out[col].dt.month.astype("Int64").astype(str) + "/" + \
-                  out[col].dt.day.astype("Int64").astype(str) + "/" + \
+    date_series = out[col].dt.day.astype("Int64").astype(str) + "/" + \
+                  out[col].dt.month.astype("Int64").astype(str) + "/" + \
                   out[col].dt.year.astype("Int64").astype(str)
     hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
