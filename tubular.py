@@ -117,7 +117,7 @@ def process_dataframe(
         raw,
         errors="coerce",
         dayfirst=True,        # tus datos vienen como 21/09/2025
-        # infer_datetime_format=True  # <- deprecado, no lo uses
+    
     )
 
     # 3) TZ opcional
