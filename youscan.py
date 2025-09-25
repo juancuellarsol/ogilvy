@@ -117,12 +117,12 @@ def process_dataframe(
     ts = _ensure_naive(ts)
 
     # 3) Derivadas: date + hora
-    #date_series = (
-    #    ts.dt.month.astype("Int64").astype(str) + "/" +
-    #    ts.dt.day.astype("Int64").astype(str) + "/" +
-    #    ts.dt.year.astype("Int64").astype(str)
-    #)
-    date_series = pd.to_datetime(out[col])
+    date_series = (
+        ts.dt.day.astype("Int64").astype(str) + "/" +
+        ts.dt.month.astype("Int64").astype(str) + "/" +
+        ts.dt.year.astype("Int64").astype(str)
+    )
+    #date_series = pd.to_datetime(out[col])
 
 
 # Parseamos HH:MM (24h) y lo pasamos a 12h con segundos en :00
