@@ -177,7 +177,6 @@ def process_file(
         drop_original_created=drop_original_created
     )
 
-
 def _col_idx_to_xlsx_col(idx: int) -> str:
     s = ""
     n = idx + 1
