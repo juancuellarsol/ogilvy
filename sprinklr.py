@@ -179,7 +179,6 @@ def process_file(
 
 
 def _col_idx_to_xlsx_col(idx: int) -> str:
-    # 0->A, 1->B, ... 25->Z, 26->AA ...
     s = ""
     n = idx + 1
     while n:
@@ -190,35 +189,42 @@ def _col_idx_to_xlsx_col(idx: int) -> str:
 def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
     out_path = Path(out_path)
 
-    # Asegura que 'date' sea datetime real (no texto)
+    # --- 1) Garantizar que 'date' es solo fecha (sin hora) ---
     if "date" in df.columns:
         df = df.copy()
-        # Ajusta format si tu 'date' es texto en M/D/YYYY o ya es datetime
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        # Convierte a datetime si fuera texto
+        d = pd.to_datetime(df["date"], errors="coerce")
+        # Quita cualquier hora (00:00:00)
+        d = d.dt.normalize()                # <-- clave para que Excel no arrastre hora
+        # Alternativa aún más estricta: date puro
+        # d = d.dt.date
+        df["date"] = d
 
     ext = out_path.suffix.lower()
     if ext in (".xlsx", ".xls"):
         try:
-            import xlsxwriter  # noqa: F401  # solo para asegurar disponibilidad
+            import xlsxwriter  # asegura el motor
             with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
                 sheet = "Sheet1"
                 df.to_excel(writer, index=False, sheet_name=sheet)
 
+                workbook  = writer.book
+                worksheet = writer.sheets[sheet]
+
+                # --- 2) Formato de celda dd/mm/yyyy ---
                 if "date" in df.columns:
-                    workbook  = writer.book
-                    worksheet = writer.sheets[sheet]
                     date_fmt  = workbook.add_format({"num_format": "dd/mm/yyyy"})
                     col_idx   = df.columns.get_loc("date")
                     col_letter = _col_idx_to_xlsx_col(col_idx)
                     worksheet.set_column(f"{col_letter}:{col_letter}", 12, date_fmt)
 
                 if "hora" in df.columns:
-                    col_idx_h = df.columns.get_loc("hora")
+                    col_idx_h   = df.columns.get_loc("hora")
                     col_letter_h = _col_idx_to_xlsx_col(col_idx_h)
-                    writer.sheets[sheet].set_column(f"{col_letter_h}:{col_letter_h}", 12)
+                    worksheet.set_column(f"{col_letter_h}:{col_letter_h}", 12)
 
         except ModuleNotFoundError:
-            # Fallback: guardar y formatear con openpyxl sin instalar nada extra
+            # Fallback con openpyxl
             df.to_excel(out_path, index=False)
             try:
                 from openpyxl import load_workbook
@@ -226,16 +232,14 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
                 wb = load_workbook(out_path)
                 ws = wb.active
                 if "date" in df.columns:
-                    col_idx = df.columns.get_loc("date") + 1  # openpyxl es 1-based
+                    col_idx = df.columns.get_loc("date") + 1  # 1-based
                     for cell in ws.iter_cols(min_col=col_idx, max_col=col_idx,
                                              min_row=2, max_row=ws.max_row):
                         for c in cell:
                             c.number_format = numbers.FORMAT_DATE_DDMMYYYY
                 wb.save(out_path)
             except Exception:
-                # si no hay openpyxl disponible, al menos quedará sin formato
                 pass
-
     elif ext == ".csv":
         df.to_csv(out_path, index=False)
     else:
