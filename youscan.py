@@ -166,7 +166,7 @@ def process_dataframe(
         keep_columns = [
             # ejemplo de campos frecuentes; edítalos según tu export
             "Author", "Source", "Title", "URL", "Likes", "Comments", "Shares",
-            "Reach", "Engagement"
+            "Reach", "Engagement", "Views"
         ]
 
     if keep_columns is not None:
