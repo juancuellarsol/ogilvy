@@ -115,8 +115,9 @@ def process_dataframe(
 
     date_series = pd.to_datetime(out[col])
     
-    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
+    hora_series = out[col].dt.strftime("%I:%M:%S %p")str.replace("AM", "a.m.").str.replace("PM", "p.m.").str.lstrip("0")
 
+    
     # Concatenación (solo si la quieres como texto también)
     #tag_text = date_series + "-" + hora_series
 
