@@ -114,6 +114,8 @@ def process_dataframe(
     date_series = out[col].dt.day.astype("Int64").astype(str) + "/" + \
                   out[col].dt.month.astype("Int64").astype(str) + "/" + \
                   out[col].dt.year.astype("Int64").astype(str)
+    date_series = pd.to_datetime(date_series, format="%m/%d/%Y", errors="coerce")
+    
     hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
     # Concatenación (solo si la quieres como texto también)
