@@ -83,7 +83,7 @@ def _ensure_naive(dt_series: pd.Series) -> pd.Series:
 
 def _coerce_datetime(s: pd.Series) -> pd.Series:
     if not pd.api.types.is_datetime64_any_dtype(s):
-        s = pd.to_datetime(s, errors="coerce", dayfirst=True, format="%d/%m/%Y %H:%M:%S")
+        s = pd.to_datetime(s, errors="coerce", dayfirst=True) #, format="%d/%m/%Y %H:%M:%S")
         
     return s
 
