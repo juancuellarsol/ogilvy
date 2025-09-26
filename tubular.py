@@ -269,51 +269,57 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
         df["hora"] = frac
 
     ext = out_path.suffix.lower()
-    if ext in (".xlsx", ".xls"):
+if ext in (".xlsx", ".xls"):
+    try:
+        import xlsxwriter
+        with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
+            sheet = "Sheet1"
+            df.to_excel(writer, index=False, sheet_name=sheet)
+
+            wb = writer.book
+            ws = writer.sheets[sheet]
+
+            # (opcional) da formato dd/mm/yy a 'date' si existe
+            if "date" in df.columns:
+                fmt_date = wb.add_format({"num_format": "dd/mm/yy"})
+                cidx = df.columns.get_loc("date")
+                col  = _col_idx_to_xlsx_col(cidx)
+                ws.set_column(f"{col}:{col}", 10, fmt_date)
+
+            # >>> ESTE ES EL QUE TE FALTA <<<
+            if "hora" in df.columns:
+                fmt_time = wb.add_format({"num_format": "h:mm:ss AM/PM"})
+                cidx = df.columns.get_loc("hora")
+                col  = _col_idx_to_xlsx_col(cidx)
+                ws.set_column(f"{col}:{col}", 12, fmt_time)
+
+    except ModuleNotFoundError:
+        # Fallback openpyxl
+        df.to_excel(out_path, index=False)
         try:
-            import xlsxwriter  # asegura el motor
-            with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
-                sheet = "Sheet1"
-                df.to_excel(writer, index=False, sheet_name=sheet)
+            from openpyxl import load_workbook
+            wb = load_workbook(out_path)
+            ws = wb.active
+            from openpyxl.styles import numbers
 
-                workbook  = writer.book
-                ws        = writer.sheets[sheet]
+            if "date" in df.columns:
+                cidx = df.columns.get_loc("date") + 1
+                for col_cells in ws.iter_cols(min_col=cidx, max_col=cidx,
+                                              min_row=2, max_row=ws.max_row):
+                    for c in col_cells:
+                        c.number_format = numbers.FORMAT_DATE_DDMMYY
 
-                # 2) Formato de celda dd/mm/yy (como en tu imagen 2)
-                if "date" in df.columns:
-                    fmt = workbook.add_format({"num_format": "dd/mm/yy"})
-                    cidx = df.columns.get_loc("date")
-                    col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 10, fmt)  # ancho opcional
+            # >>> Y ESTE PARA EL FALLBACK <<<
+            if "hora" in df.columns:
+                cidx = df.columns.get_loc("hora") + 1
+                for col_cells in ws.iter_cols(min_col=cidx, max_col=cidx,
+                                              min_row=2, max_row=ws.max_row):
+                    for c in col_cells:
+                        c.number_format = "h:mm:ss AM/PM"
 
-                if "hora" in df.columns:
-                    fmt_time = workbook.add_format({"num_format": "h:mm:ss AM/PM"})
-                    cidx = df.columns.get_loc("hora")
-                    col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 12, fmt_time)
-                
-                #if "hora" in df.columns:
-                #    cidx = df.columns.get_loc("hora")
-                #    col  = _col_idx_to_xlsx_col(cidx)
-                #    ws.set_column(f"{col}:{col}", 12)
-
-        except ModuleNotFoundError:
-            # Fallback: guarda y aplica formato con openpyxl
-            df.to_excel(out_path, index=False)
-            try:
-                from openpyxl import load_workbook
-                from openpyxl.styles import numbers
-                wb = load_workbook(out_path)
-                ws = wb.active
-                if "date" in df.columns:
-                    cidx = df.columns.get_loc("date") + 1  # 1-based
-                    for cell in ws.iter_cols(min_col=cidx, max_col=cidx,
-                                             min_row=2, max_row=ws.max_row):
-                        for c in cell:
-                            c.number_format = numbers.FORMAT_DATE_DDMMYY  # dd/mm/yy
-                wb.save(out_path)
-            except Exception:
-                pass
+            wb.save(out_path)
+        except Exception:
+            pass
     elif ext == ".csv":
         df.to_csv(out_path, index=False)
     else:
