@@ -238,102 +238,83 @@ def _col_idx_to_xlsx_col(idx: int) -> str:
 def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
     out_path = Path(out_path)
 
-    # 1) Normaliza 'date' a SOLO fecha (sin hora)
+    # Si tienes columna 'date' y quieres guardarla como fecha real:
     if "date" in df.columns:
+        d = pd.to_datetime(df["date"], errors="coerce")
         df = df.copy()
-        d = pd.to_datetime(df["date"], errors="coerce")  # si viene texto, conv.
-        df["date"] = d.dt.normalize()                    # 00:00:00 (sin hora)
-        # Si quieres aún más estricto: df["date"] = d.dt.date
-    
-    if "hora" in df.columns:
-        # 1) Normaliza unicode y variantes de "a. m." / "p. m."
-        hora_norm = (
-            df["hora"].astype(str)
-              # normaliza posibles caracteres raros
-              .str.normalize("NFKC")
-              .str.replace("\u00A0", " ", regex=False)   # NBSP
-              .str.replace("\u202F", " ", regex=False)   # NARROW NBSP
-              .str.strip()
-              # convierte "a. m.", "a.m.", "AM", "am", etc. -> " AM"
-              .str.replace(r"(?i)\s*a\s*\.?\s*m\.?\s*$", " AM", regex=True)
-              .str.replace(r"(?i)\s*p\s*\.?\s*m\.?\s*$", " PM", regex=True)
-        )
-    
-        # 2) Parseo estricto a datetime (solo hora)
-        h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
-    
-        # 3) Convierte a fracción de día (número 0..1) para que Excel la trate como tiempo
-        frac = (h.dt.hour * 3600 + h.dt.minute * 60 + h.dt.second) / 86400.0
-    
-        df = df.copy()
-        df["hora"] = frac
+        df["date"] = d.dt.normalize()  # 00:00:00 (Excel la verá como fecha)
 
     ext = out_path.suffix.lower()
-if ext in (".xlsx", ".xls"):
-    try:
-        import xlsxwriter
-        with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
-            sheet = "Sheet1"
-            df.to_excel(writer, index=False, sheet_name=sheet)
-
-            wb = writer.book
-            ws = writer.sheets[sheet]
-
-            # (opcional) da formato dd/mm/yy a 'date' si existe
-            if "date" in df.columns:
-                fmt_date = wb.add_format({"num_format": "dd/mm/yy"})
-                cidx = df.columns.get_loc("date")
-                col  = _col_idx_to_xlsx_col(cidx)
-                ws.set_column(f"{col}:{col}", 10, fmt_date)
-
-            # >>> ESTE ES EL QUE TE FALTA <<<
-            if "hora" in df.columns:
-                fmt_time = wb.add_format({"num_format": "h:mm:ss AM/PM"})
-                c_hora = df.columns.get_loc("hora")       # índice de columna (0-based)
-                base = pd.Timestamp(1899, 12, 30)         # fecha base de Excel
-        
-                # Reescribe celda por celda como datetime para que Excel lo muestre como hora
-                for r, v in enumerate(df["hora"], start=1):  # fila 1 = primera fila de datos (después del header)
-                    if pd.notna(v):
-                        # v viene como fracción del día; conviértela a datetime
-                        dt = base + pd.to_timedelta(float(v) * 86400, unit="s")
-                        ws.write_datetime(r, c_hora, dt.to_pydatetime(), fmt_time)
-        
-                # (opcional) ancho de columna
-                ws.set_column(c_hora, c_hora, 12)
-            #if "hora" in df.columns:
-            #    fmt_time = wb.add_format({"num_format": "h:mm:ss AM/PM"})
-            #    cidx = df.columns.get_loc("hora")
-            #    col  = _col_idx_to_xlsx_col(cidx)
-            #    ws.set_column(f"{col}:{col}", 12, fmt_time)
-
-    except ModuleNotFoundError:
-        # Fallback openpyxl
-        df.to_excel(out_path, index=False)
+    if ext in (".xlsx", ".xls"):
         try:
-            from openpyxl import load_workbook
-            wb = load_workbook(out_path)
-            ws = wb.active
-            from openpyxl.styles import numbers
+            import xlsxwriter  # asegura que use este motor
+            with pd.ExcelWriter(out_path, engine="xlsxwriter") as writer:
+                sheet = "Sheet1"
+                df.to_excel(writer, index=False, sheet_name=sheet)
 
-            if "date" in df.columns:
-                cidx = df.columns.get_loc("date") + 1
-                for col_cells in ws.iter_cols(min_col=cidx, max_col=cidx,
-                                              min_row=2, max_row=ws.max_row):
-                    for c in col_cells:
-                        c.number_format = numbers.FORMAT_DATE_DDMMYY
+                wb = writer.book
+                ws = writer.sheets[sheet]
 
-            # >>> Y ESTE PARA EL FALLBACK <<<
-            if "hora" in df.columns:
-                cidx = df.columns.get_loc("hora") + 1
-                for col_cells in ws.iter_cols(min_col=cidx, max_col=cidx,
-                                              min_row=2, max_row=ws.max_row):
-                    for c in col_cells:
-                        c.number_format = "h:mm:ss AM/PM"
+                # --- Formato fecha (opcional) ---
+                if "date" in df.columns:
+                    fmt_date = wb.add_format({"num_format": "dd/mm/yy"})
+                    c_date = df.columns.get_loc("date")
+                    ws.set_column(c_date, c_date, 10, fmt_date)
 
-            wb.save(out_path)
-        except Exception:
-            pass
+                # --- FORMATEO REAL DE 'hora' ---
+                # 'hora' DEBE venir como fracción del día (0..1). La reescribimos como datetime
+                if "hora" in df.columns:
+                    fmt_time = wb.add_format({"num_format": "h:mm:ss AM/PM"})
+                    c_hora = df.columns.get_loc("hora")
+                    ws.set_column(c_hora, c_hora, 12, fmt_time)
+
+                    base = pd.Timestamp(1899, 12, 30)  # fecha base de Excel
+                    vals = df["hora"].values
+
+                    # Reescribe fila por fila (r=1 es la primera fila de datos, debajo del header)
+                    for r, v in enumerate(vals, start=1):
+                        if pd.notna(v):
+                            # v es fracción de día -> pásalo a datetime de Excel
+                            dt = base + pd.to_timedelta(float(v) * 86400, unit="s")
+                            ws.write_datetime(r, c_hora, dt.to_pydatetime(), fmt_time)
+                        else:
+                            ws.write_blank(r, c_hora, None, fmt_time)
+
+        except ModuleNotFoundError:
+            # --- Fallback sin xlsxwriter: usa openpyxl ---
+            df.to_excel(out_path, index=False)
+            try:
+                from openpyxl import load_workbook
+                from openpyxl.utils import get_column_letter
+                wb = load_workbook(out_path)
+                ws = wb.active
+
+                if "date" in df.columns:
+                    from openpyxl.styles import numbers
+                    c_date = df.columns.get_loc("date") + 1
+                    for col_cells in ws.iter_cols(min_col=c_date, max_col=c_date,
+                                                  min_row=2, max_row=ws.max_row):
+                        for c in col_cells:
+                            c.number_format = numbers.FORMAT_DATE_DDMMYY
+
+                if "hora" in df.columns:
+                    c_hora = df.columns.get_loc("hora") + 1  # 1-based
+                    col_letter = get_column_letter(c_hora)
+                    for r, v in enumerate(df["hora"].values, start=2):
+                        cell = ws[f"{col_letter}{r}"]
+                        if pd.notna(v):
+                            # conv. a datetime y deja solo la hora (sin fecha)
+                            ts = (pd.Timestamp(1899, 12, 30) +
+                                  pd.to_timedelta(float(v) * 86400, unit="s"))
+                            cell.value = ts.to_pydatetime().time()
+                            cell.number_format = "h:mm:ss AM/PM"
+                        else:
+                            cell.value = None
+                    wb.save(out_path)
+            except Exception:
+                # si algo falla, al menos queda el archivo
+                pass
+
     elif ext == ".csv":
         df.to_csv(out_path, index=False)
     else:
