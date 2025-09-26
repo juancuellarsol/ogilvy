@@ -230,9 +230,27 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
         df["date"] = d.dt.normalize()
 
     # Normaliza 'hora' a datetime
-    if "hora" in df.columns:
-        df = df.copy()
-        df["hora"] = pd.to_datetime(df["hora"], format="%I:%M:%S %p", errors="coerce")
+   if "hora" in df.columns:
+       hora_norm = (
+           df["hora"].astype(str)
+             .str.normalize("NFKC")
+             .str.replace("\u00A0", " ", regex=False)   # NBSP
+             .str.replace("\u202F", " ", regex=False)   # NARROW NBSP
+             .str.strip()
+             .str.replace(r"(?i)\s*a\s*\.?\s*m\.?\s*$", " AM", regex=True)
+             .str.replace(r"(?i)\s*p\s*\.?\s*m\.?\s*$", " PM", regex=True)
+       )
+       h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
+       frac = (h.dt.hour * 3600 + h.dt.minute * 60 + h.dt.second) / 86400.0
+       df = df.copy()
+       df["hora"] = frac
+    
+   
+
+
+#if "hora" in df.columns:
+ #       df = df.copy()
+ #       df["hora"] = pd.to_datetime(df["hora"], format="%I:%M:%S %p", errors="coerce")
 
     ext = out_path.suffix.lower()
     if ext in (".xlsx", ".xls"):
