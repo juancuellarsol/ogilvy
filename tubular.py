@@ -171,7 +171,11 @@ def process_dataframe(
     #hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
     hour_bucket = out[col].dt.floor("h")
-    hora_series = hour_bucket.dt.strftime("%I:00:00 %p").str.lstrip("0")
+    hora_seconds = (hour_bucket.dt.hour * 3600
+                + hour_bucket.dt.minute * 60
+                + hour_bucket.dt.second)
+    hora_series  = hora_seconds / 86400.0   
+    #hora_series = hour_bucket.dt.strftime("%I:00:00 %p").str.lstrip("0")
 
     # Insertar evitando duplicados
     for c in ("date", "hora"):
