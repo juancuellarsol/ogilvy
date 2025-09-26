@@ -242,6 +242,29 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
         d = pd.to_datetime(df["date"], errors="coerce")  # si viene texto, conv.
         df["date"] = d.dt.normalize()                    # 00:00:00 (sin hora)
         # Si quieres aún más estricto: df["date"] = d.dt.date
+    
+    if "hora" in df.columns:
+        # 1) Normaliza unicode y variantes de "a. m." / "p. m."
+        hora_norm = (
+            df["hora"].astype(str)
+              # normaliza posibles caracteres raros
+              .str.normalize("NFKC")
+              .str.replace("\u00A0", " ", regex=False)   # NBSP
+              .str.replace("\u202F", " ", regex=False)   # NARROW NBSP
+              .str.strip()
+              # convierte "a. m.", "a.m.", "AM", "am", etc. -> " AM"
+              .str.replace(r"(?i)\s*a\s*\.?\s*m\.?\s*$", " AM", regex=True)
+              .str.replace(r"(?i)\s*p\s*\.?\s*m\.?\s*$", " PM", regex=True)
+        )
+    
+        # 2) Parseo estricto a datetime (solo hora)
+        h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
+    
+        # 3) Convierte a fracción de día (número 0..1) para que Excel la trate como tiempo
+        frac = (h.dt.hour * 3600 + h.dt.minute * 60 + h.dt.second) / 86400.0
+    
+        df = df.copy()
+        df["hora"] = frac
 
     ext = out_path.suffix.lower()
     if ext in (".xlsx", ".xls"):
