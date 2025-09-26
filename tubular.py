@@ -168,10 +168,10 @@ def process_dataframe(
     #)
     date_series = pd.to_datetime(out[col])
 
-    hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
+    #hora_series = out[col].dt.strftime("%I:%M:%S %p").str.lstrip("0")
 
-    #hour_bucket = out[col].dt.floor("h")
-    #hora_series = hour_bucket.dt.strftime("%I:00:00 %p").str.lstrip("0")
+    hour_bucket = out[col].dt.floor("h")
+    hora_series = hour_bucket.dt.strftime("%I:00:00 %p").str.lstrip("0")
 
     # Insertar evitando duplicados
     for c in ("date", "hora"):
