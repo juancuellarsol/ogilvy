@@ -194,15 +194,23 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
 
     # --- Asegura que 'hora' sea valor de tiempo (no texto) ---
     if "hora" in df.columns:
+        # 1) Normaliza unicode y variantes de "a. m." / "p. m."
         hora_norm = (
             df["hora"].astype(str)
+              # normaliza posibles caracteres raros
+              .str.normalize("NFKC")
+              .str.replace("\u00A0", " ", regex=False)   # NBSP
+              .str.replace("\u202F", " ", regex=False)   # NARROW NBSP
               .str.strip()
-              .str.replace(r"\s*a[.\s]?m[.]?", " AM", regex=True, case=False)
-              .str.replace(r"\s*p[.\s]?m[.]?", " PM", regex=True, case=False)
+              # convierte "a. m.", "a.m.", "AM", "am", etc. -> " AM"
+              .str.replace(r"(?i)\s*a\s*\.?\s*m\.?\s*$", " AM", regex=True)
+              .str.replace(r"(?i)\s*p\s*\.?\s*m\.?\s*$", " PM", regex=True)
         )
+    
+        # 2) Parseo estricto a datetime (solo hora)
         h = pd.to_datetime(hora_norm, format="%I:%M:%S %p", errors="coerce")
     
-        # ⇩ convierte 07:15:30 ->  (7*3600 + 15*60 + 30) / 86400  = fracción del día
+        # 3) Convierte a fracción de día (número 0..1) para que Excel la trate como tiempo
         frac = (h.dt.hour * 3600 + h.dt.minute * 60 + h.dt.second) / 86400.0
     
         df = df.copy()
