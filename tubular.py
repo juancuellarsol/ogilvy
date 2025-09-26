@@ -289,9 +289,23 @@ if ext in (".xlsx", ".xls"):
             # >>> ESTE ES EL QUE TE FALTA <<<
             if "hora" in df.columns:
                 fmt_time = wb.add_format({"num_format": "h:mm:ss AM/PM"})
-                cidx = df.columns.get_loc("hora")
-                col  = _col_idx_to_xlsx_col(cidx)
-                ws.set_column(f"{col}:{col}", 12, fmt_time)
+                c_hora = df.columns.get_loc("hora")       # índice de columna (0-based)
+                base = pd.Timestamp(1899, 12, 30)         # fecha base de Excel
+        
+                # Reescribe celda por celda como datetime para que Excel lo muestre como hora
+                for r, v in enumerate(df["hora"], start=1):  # fila 1 = primera fila de datos (después del header)
+                    if pd.notna(v):
+                        # v viene como fracción del día; conviértela a datetime
+                        dt = base + pd.to_timedelta(float(v) * 86400, unit="s")
+                        ws.write_datetime(r, c_hora, dt.to_pydatetime(), fmt_time)
+        
+                # (opcional) ancho de columna
+                ws.set_column(c_hora, c_hora, 12)
+            #if "hora" in df.columns:
+            #    fmt_time = wb.add_format({"num_format": "h:mm:ss AM/PM"})
+            #    cidx = df.columns.get_loc("hora")
+            #    col  = _col_idx_to_xlsx_col(cidx)
+            #    ws.set_column(f"{col}:{col}", 12, fmt_time)
 
     except ModuleNotFoundError:
         # Fallback openpyxl
