@@ -285,9 +285,15 @@ def export_df(df: pd.DataFrame, out_path: Union[str, Path]) -> Path:
                     ws.set_column(f"{col}:{col}", 10, fmt)  # ancho opcional
 
                 if "hora" in df.columns:
+                    fmt_time = workbook.add_format({"num_format": "h:mm:ss AM/PM"})
                     cidx = df.columns.get_loc("hora")
                     col  = _col_idx_to_xlsx_col(cidx)
-                    ws.set_column(f"{col}:{col}", 12)
+                    ws.set_column(f"{col}:{col}", 12, fmt_time)
+                
+                #if "hora" in df.columns:
+                #    cidx = df.columns.get_loc("hora")
+                #    col  = _col_idx_to_xlsx_col(cidx)
+                #    ws.set_column(f"{col}:{col}", 12)
 
         except ModuleNotFoundError:
             # Fallback: guarda y aplica formato con openpyxl
